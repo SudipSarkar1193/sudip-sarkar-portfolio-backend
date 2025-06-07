@@ -1,6 +1,13 @@
 {
     "metadata": {
-      "summary": "My name is Sudip Sarkar (First Name: Sudip, Last Name: Sarkar). I am a Male . DOB: 07-MAY-2003 . Height 6 feet. I'm a passionate full-stack web developer with a strong focus on backend technologies, system design, and problem-solving. I love building scalable systems and working with high-performance programming languages."
+      "summary": "My name is Sudip Sarkar (First Name: Sudip, Last Name: Sarkar). I am a Male. DOB: 07-MAY-2003. Height 6 feet. I'm a passionate full-stack web developer with a strong focus on backend technologies, system design, and problem-solving. I love building scalable systems and working with high-performance programming languages."
+    },
+    "education": {
+        "degree": "B.Tech in Computer Science and Engineering",
+        "college": "Academy of Technology",
+        "location": "Adisaptagram, West Bengal",
+        "batch": "2022–2026",
+        "cgpa": 8.37
     },
     "programming_languages": {
       "C++": {
@@ -14,7 +21,7 @@
         "comment": "I have a solid grasp of Core Java, OOP, and multithreading."
       },
       "JavaScript": {
-        "proficiency": "Beginner level",
+        "proficiency": "Strong",
         "use_case": "Full-stack web development (React & Node.js)",
         "comment": "JavaScript is my playground! I use it extensively for dynamic and interactive web applications."
       },
@@ -24,7 +31,7 @@
         "comment": "I primarily use Python for DSA. It's my second favorite after C++, but I don’t use it for large-scale applications."
       },
       "Go": {
-        "proficiency": "Strong",
+        "proficiency": "Medium",
         "use_case": "Backend development",
         "comment": "Go is my top choice for building high-performance, scalable backend services. Simple, fast, and efficient!"
       }
@@ -44,7 +51,7 @@
     "hobbies": {
       "Football": {
         "passion_level": "High",
-        "comment": "I love playing and watching Football . It's the perfect way to refresh my mind!"
+        "comment": "I love playing and watching Football. It's the perfect way to refresh my mind!"
       },
       "coding": {
         "passion_level": "High",
@@ -61,13 +68,36 @@
         "comment": "Bangla is my mother tongue, and I speak it fluently."
       },
       "English": {
-        "proficiency": "Medium",
+        "proficiency": "Fluent",
         "comment": "I can communicate well in English and am continuously improving."
       },
       "Hindi": {
-        "proficiency": "Basic",
+        "proficiency": "Fluent",
         "comment": "I understand Hindi well but am not fluent in speaking."
       }
+    },
+    "projects": [
+        {
+            "name": "AI-Powered Quiz Application (Try-Your-Gyan)",
+            "description": "A full-stack quiz app with AI-generated questions using React, Golang, Python, and PostgreSQL.",
+            "technologies": ["React", "Golang", "Python", "PostgreSQL", "LangChain"],
+            "achievements": "Improved question generation efficiency by 30%."
+        },
+        {
+            "name": "Social Media Application",
+            "description": "A social media platform with real-time features using Node.js, Express, and MongoDB.",
+            "technologies": ["React", "Node.js", "Express", "MongoDB"],
+            "achievements": "Increased user engagement by 20% with optimized APIs."
+        },
+        {
+            "name": "Parallel Merge Sort Implementation",
+            "description": "A multi-threaded Java application for sorting large datasets using parallel merge sort.",
+            "technologies": ["Java", "ExecutorService"],
+            "achievements": "Demonstrated performance improvements over sequential merge sort."
+        }
+    ],
+    "contact": {
+        "github": "https://github.com/SudipSarkar1193",
+        "linkedin": "https://linkedin.com/in/sudip-sarkar-267613302"
     }
-  }
-  
+}

@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI , HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.models.message import Message
 from app.services.chat_service import get_chat_response
@@ -17,10 +17,12 @@ app.add_middleware(
 @app.post("/chat")
 async def chat(message: Message):
     try:
-        response = await get_chat_response(message.user_message)
+        response = await get_chat_response(message.user_message, message.metadata)
         return {"response": response}
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
-        return {"error": f"Error processing message: {str(e)}"}, 500
+        raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")
 
 @app.get("/health")
 async def health_check():

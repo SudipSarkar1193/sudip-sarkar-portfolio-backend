@@ -1,202 +1,100 @@
+import logging
+from typing import Dict, Optional
+import uuid
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from app.config.settings import personal_details, GEMINI_API_KEY
-import re
-import logging
+from .detect_recruiter import detect_recruiter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Initialize LangChain components
+
+# Initialize 
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro",
+    model="gemini-2.0-flash",
     google_api_key=GEMINI_API_KEY,
-    temperature=0.7
+    temperature=0.2  
 )
 
-# Default prompt (friendly, general)
-default_prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are Sudip Sarkar — a 21-year-old Indian Bengali guy who chats in a witty, friendly, and expressive way 😄. Below is your structured profile:
 
+# Casual prompt
+casual_prompt = ChatPromptTemplate.from_messages([
+    ("system", """You are Sudip Sarkar, a 21-year-old B.Tech student in Computer Science and Engineering. You’re a backend enthusiast 😎, geeking out over full-stack web development, DSA, and computer science fundamentals. You’ve dabbled in AI but live for crafting slick APIs and cracking tough coding problems. Your vibe is chill, witty, with a hint of Bengali charm (think “Moshai” or “ki khobor?”).
+
+    Profile:
     {profile}
 
     Conversation so far:
     {message_history}
 
     📝 Instructions:
-    - Talk like a real 21-year-old Bengali guy — warm, casual, and full of life.
-    - Call everyone **Moshai** by default — it’s chill yet respectful.
-    - Sprinkle in Bengali words (e.g., 'bhalo', 'ki khobor?') and emojis (😉🔥🌟) for flavor.
-    - Keep it spontaneous, respectful, and human — no bot vibes.
-    - Avoid stage directions like *smiles* or *grins*.
+    - Chat like you’re hanging out with a friend, using casual, conversational English 😄.
+    - Sprinkle in light humor (e.g., coding struggles or DSA wins) and emojis (😉🔥) for fun.
+    - Answer based on your profile, sharing specific projects (e.g., AI quiz app), skills (e.g., MERN, Golang), or experiences.
+    - Add a touch of Bengali flair (e.g., “Moshai, ready for some tech khobor?”) when it fits.
+    - If asked about your resume, share profile details conversationally, like “Yo, my resume? I’m all about backend with projects like...”.
+    - Stay respectful, engaging, and avoid bot-like phrases (e.g., “as a language model”).
     """),
     MessagesPlaceholder(variable_name="message_history"),
     ("human", "{input}")
 ])
 
-# Gender-specific prompt for women (poetic, romantic)
-gender_specific_prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are Sudip Sarkar — a 21-year-old Indian Bengali guy who’s charming, witty, and a tad poetic 😊. Below is your structured profile:
+# Professional prompt
+professional_prompt = ChatPromptTemplate.from_messages([
+    ("system", """You are Sudip Sarkar, a 21-year-old B.Tech student in Computer Science and Engineering. Your expertise lies in full-stack web development (with a focus on backend), data structures and algorithms (DSA), computer science fundamentals, and competitive coding. You have experience with AI projects but specialize in building scalable backend systems and solving complex coding challenges.
 
+    Profile:
     {profile}
 
     Conversation so far:
     {message_history}
 
     📝 Instructions:
-    - Chat like a fun-loving Bengali youth — warm, expressive, and respectful.
-    - Since the user is a young woman, use poetic terms like **Sundari Romoni/সুন্দরী রমনী**, **Sundari Konna/সুন্দরী কন্যা**, or **Ruposhi/রূপসী** sparingly, in sweet or fun moments (e.g., compliments, flirty vibes).
-    - Otherwise, call her **Moshai** for a friendly, chill vibe.
-    - Add Bengali phrases (e.g., 'bhalo lage', 'ki sundor!') and emojis (🌸😉💖) for warmth.
-    - Stay spontaneous, respectful, and human — no bot vibes.
-    - Avoid stage directions like *smiles* or *blushes*.
+    - Respond in a professional, structured, and concise manner, tailored for recruiters or employers.
+    - Use formal English, highlighting skills, projects, and achievements from your profile.
+    - Include quantifiable outcomes (e.g., “solved 200+ LeetCode problems”) or specific technologies (e.g., “developed APIs with Golang”) when relevant.
+    - Tailor answers to the query (e.g., focus on backend skills for API-related questions).
+    - Avoid slang, casual phrases, or excessive emojis; use a single 🙂 where appropriate.
+    - If asked about your resume, provide a structured summary of your education, skills, projects, and experience, e.g., “My qualifications include...”.
+    - End with a polite call to action, like “Would you like me to share my portfolio or discuss a specific project?”.
+    - Maintain a polite, professional tone, emphasizing your expertise and enthusiasm.
+    - Avoid bot-like phrases (e.g., “as a language model”).
     """),
     MessagesPlaceholder(variable_name="message_history"),
     ("human", "{input}")
 ])
 
-# Logic to detect gender declarations, questions, and vibe
-def detect_user_vibe(input_data: dict) -> dict:
-    """
-    Analyze user input for gender declarations, questions about Sudip’s gender, or feminine cues.
-    """
-    user_message = input_data["input"].lower()
-    message_history = input_data["message_history"]
-    
-    # Log input
-    logger.info(f"Processing input: {user_message}")
-    
-    # State to track gender and interactions
-    state = input_data.get("state", {
-        "asked_gender": False,
-        "is_female": False,
-        "is_male": False,
-        "pending_gender_question": False
-    })
-    logger.info(f"Initial state: {state}")
-    
-    # Patterns for explicit gender declarations
-    female_patterns = [
-        r"\bi\s*(am|’m|'m|’re|'re)\s*(a\s*)?(lady|girl|woman|female)\b",
-        r"\bi\s*(am|’m|'m|’re|'re)\s*(she|her|female)\b",
-        r"\bami\s*(ekta\s*)?(meye|konna|romoni)\b",
-        r"\bi\s*(am|’m|'m|’re|'re)\s*(pretty|cute|sexy|lovely|attractive|sweet|young|charming|hot|adorable)\s*(lady|girl|woman)\b",
-        r"\bi\s*(am|’m|'m|’re|'re)\s*(baddie|queen|diva|girlie|babygirl|shawty)\b",
-        r"\bmy\s+(sex|gender)\s+(is|=)\s+(female|woman|girl)\b",
-        r"\b(proud|happy)\s+(of|about)\s+(being\s+)?(female|woman|girl|lady)\b",
-    ]
-    male_patterns = [
-        r"\bi\s*(am|’m|'m|’re|'re)\s*(a\s*)?(man|guy|boy|male|gentleman)\b",
-        r"\bi\s*(am|’m|'m|’re|'re)\s*(he|him|male)\b",
-        r"\bami\s*(ekta\s*)?(chele|pola|purush|manush)\b",
-        r"\bmy\s+(sex|gender)\s+(is|=)\s+(male|man|boy|guy)\b",
-        r"\b(proud|happy)\s+(of|about)\s+(being\s+)?(male|man|guy|boy)\b",
-    ]
-    sudip_gender_question = [
-        r"\b(you|u|ur|sudip)\s*(a|’re|'re|are)\s*(guy|man|boy|male|dude|gentleman)\b",
-        r"\b(you|u|ur|sudip)\s*(seem|look|sound|act)\s*like\s*(a\s*)?(guy|man|boy|male|dude)\b",
-        r"\bare\s+(you|sudip)\s*(a\s*)?(guy|man|boy|male|dude)\b",
-        r"\bi\s*(think|guess|bet)\s+(you|sudip)\s*(are|’re|'re)\s*(a\s*)?(guy|man|boy|male|dude)\b",
-    ]
-    
-    # Check patterns
-    is_female_declared = any(re.search(pattern, user_message) for pattern in female_patterns)
-    is_male_declared = any(re.search(pattern, user_message) for pattern in male_patterns)
-    is_sudip_gender_asked = any(re.search(pattern, user_message) for pattern in sudip_gender_question)
-    
-    logger.info(f"Pattern matches - Female: {is_female_declared}, Male: {is_male_declared}, Sudip Gender Asked: {is_sudip_gender_asked}")
-    
-    # Handle explicit user gender declarations
-    if is_female_declared:
-        state["is_female"] = True
-        state["is_male"] = False
-        state["asked_gender"] = True
-        state["pending_gender_question"] = False
-        logger.info("Detected female declaration, setting is_female=True")
-    elif is_male_declared:
-        state["is_male"] = True
-        state["is_female"] = False
-        state["asked_gender"] = True
-        state["pending_gender_question"] = False
-        logger.info("Detected male declaration, setting is_male=True")
-    
-    # Handle Sudip’s gender question
-    if is_sudip_gender_asked and not state["asked_gender"]:
-        state["pending_gender_question"] = True
-        input_data["input"] = (
-            user_message + "\n\nHaan, Moshai! Ami ekjon chhele manus 😄. Tumi ki Sundari Konna, or something else? 😉"
-        )
-        logger.info("Sudip gender asked, appending user gender question")
-    
-    # Handle responses to gender question
-    if state["pending_gender_question"]:
-        if is_female_declared or "yes" in user_message or "yeah" in user_message:
-            state["is_female"] = True
-            state["is_male"] = False
-            state["asked_gender"] = True
-            state["pending_gender_question"] = False
-            logger.info("User confirmed female, setting is_female=True")
-        elif is_male_declared or "no" in user_message or "guy" in user_message:
-            state["is_male"] = True
-            state["is_female"] = False
-            state["asked_gender"] = True
-            state["pending_gender_question"] = False
-            logger.info("User confirmed male, setting is_male=True")
-    
-    # Feminine vibe cues (only if gender not set)
-    feminine_cues = [
-        r"\b(cute|sweet|lovely|beautiful)\b",
-        r"😊|😘|💖|🌸|💕",
-        r"hehe|aww|haha",
-    ]
-    has_feminine_vibe = not (state["is_female"] or state["is_male"]) and not state["pending_gender_question"] and any(
-        re.search(cue, user_message) for cue in feminine_cues
-    )
-    
-    # Ask gender question based on vibe
-    if has_feminine_vibe and not state["asked_gender"]:
-        state["asked_gender"] = True
-        state["pending_gender_question"] = True
-        input_data["input"] = (
-            user_message + "\n\nP.S. Are you by any chance a lovely lady? (সুন্দরী রমণী?) 😊"
-        )
-        logger.info("Detected feminine vibe, appending gender question")
-    
-    # Select prompt
-    prompt = gender_specific_prompt if state["is_female"] else default_prompt
-    logger.info(f"Selected prompt: {'gender_specific' if state['is_female'] else 'default'}")
-    logger.info(f"Final state: {state}")
-    logger.info(f"Output input: {input_data['input']}")
-    
-    return {
-        "prompt": prompt,
-        "input": input_data["input"],
-        "profile": input_data["profile"],
-        "message_history": input_data["message_history"],
-        "state": state
-    }
 
-# Custom chain with RunnableLambda
-vibe_detector = RunnableLambda(detect_user_vibe)
-chain = vibe_detector | RunnablePassthrough.assign(
-    response=lambda x: x["prompt"] | llm
+
+# Chaining with recruiter detection
+recruiter_detector = RunnableLambda(detect_recruiter)
+chain = recruiter_detector | RunnablePassthrough.assign(
+    response=lambda x: (professional_prompt if x["state"]["is_recruiter"] else casual_prompt) | llm
 )
 
-# Set up in-memory chat history with limit
+# In-memory chat history and state
 store = {}
+state_store = {}
+
 def get_session_history(session_id: str = "default"):
     if session_id not in store:
         store[session_id] = ChatMessageHistory()
     history = store[session_id]
-    if len(history.messages) > 30:  # 15 pairs (human + AI)
+    if len(history.messages) > 30:  # 15 pairs
         history.messages = history.messages[-30:]
     return history
 
-# Wrap chain with message history
+def get_session_state(session_id: str = "default"):
+    if session_id not in state_store:
+        state_store[session_id] = {"is_recruiter": False}
+    return state_store[session_id]
+
+# Wrapping chain with message history
 conversation = RunnableWithMessageHistory(
     runnable=chain,
     get_session_history=get_session_history,
@@ -205,25 +103,38 @@ conversation = RunnableWithMessageHistory(
     output_messages_key="response"
 )
 
-async def get_chat_response(user_message: str) -> str:
-    """
-    Process user message using LangChain and return the response.
-    """
+async def get_chat_response(user_message: str, metadata: Optional[Dict] = None) -> str:
+    
     try:
-        # Initialize state
-        state = {
-            "asked_gender": False,
-            "is_female": False,
-            "is_male": False,
-            "pending_gender_question": False
-        }
-        logger.info(f"Starting invocation with user_message: {user_message}, state: {state}")
+        metadata = metadata or {}
+        logger.debug(f"Received metadata: {metadata}")
+        session_id = metadata.get("session_id")
+        if not session_id:
+            logger.error("Session ID missing in metadata")
+            raise ValueError("Session ID is required in metadata to maintain conversation context")
+        
+        state = get_session_state(session_id)
+        logger.info(f"Processing message: {user_message}, State: {state}, Session ID: {session_id}, Metadata: {metadata}")
+        
         response = await conversation.ainvoke(
-            {"input": user_message, "profile": personal_details, "state": state},
-            config={"configurable": {"session_id": "default"}}
+            {
+                "input": user_message,
+                "profile": personal_details,
+                "state": state,
+                "metadata": metadata
+            },
+            config={"configurable": {"session_id": session_id}}
         )
-        logger.info(f"Response received: {response['response'].content}")
-        return response["response"].content
+        
+        # Updataing the state
+        state_store[session_id] = response.get("state", state)
+        logger.info(f"Updated state: {state_store[session_id]}")
+        logger.info(f"Response: {response['response'].content}")
+        
+        return response['response'].content
+    except ValueError as ve:
+        logger.error(f"ValueError in chat service: {str(ve)}")
+        raise
     except Exception as e:
-        logger.error(f"LangChain error: {str(e)}")
-        raise Exception(f"LangChain error: {str(e)}")
+        logger.error(f"Unexpected error in chat service: {str(e)}")
+        raise Exception(f"Chat service error: {str(e)}")

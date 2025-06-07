@@ -1,4 +1,12 @@
 import uvicorn
+import os
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    
+    environment = os.getenv("ENVIRONMENT", "production")
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=(environment == "development")
+    )
